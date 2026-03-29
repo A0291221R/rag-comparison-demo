@@ -1,0 +1,160 @@
+version: "3.9"
+
+services:
+  # ─── Neo4j ──────────────────────────────────────────────────────────────────
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: rag_neo4j
+    ports:
+      - "7474:7474"   # HTTP browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/password
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      NEO4J_dbms_memory_heap_initial__size: 512m
+      NEO4J_dbms_memory_heap_max__size: 2G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./graph_db/schema:/var/lib/neo4j/import
+    healthcheck:
+      test: ["CMD", "neo4j", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ─── Qdrant ─────────────────────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.4
+    container_name: rag_qdrant
+    ports:
+      - "6333:6333"   # REST
+      - "6334:6334"   # gRPC
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: rag_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ─── PostgreSQL (LangGraph checkpointer) ────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: rag_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: rag_demo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─── OpenTelemetry Collector ─────────────────────────────────────────────────
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.102.0
+    container_name: rag_otel
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+      - "8889:8889"   # Prometheus metrics
+    volumes:
+      - ./observability/otel-config.yaml:/etc/otelcol/config.yaml
+    depends_on:
+      - jaeger
+
+  # ─── Jaeger ─────────────────────────────────────────────────────────────────
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: rag_jaeger
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "14250:14250"  # gRPC
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # ─── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: rag_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+
+  # ─── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: rag_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./observability/grafana/dashboards:/etc/grafana/provisioning/dashboards
+    depends_on:
+      - prometheus
+
+  # ─── App ────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: rag_app
+    ports:
+      - "8000:8000"   # REST API
+      - "50051:50051" # gRPC
+      - "7860:7860"   # Gradio UI
+    env_file:
+      - .env
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  qdrant_data:
+  redis_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

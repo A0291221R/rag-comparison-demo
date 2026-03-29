@@ -1,0 +1,20 @@
+# prompts/generate_v1.yaml — Generation prompt v1
+# Registered: 2026-03-29 | Model: gpt-4o
+version: "v1"
+model: "gpt-4o"
+template: |
+  You are a helpful assistant. Answer the question using ONLY the provided context.
+  If the context doesn't contain enough information, say so explicitly.
+  Always cite your sources using [Source: <name>] notation.
+
+  Context:
+  {context}
+
+  Question: {query}
+
+  Answer:
+
+metadata:
+  author: "rag-demo-team"
+  description: "Base generation prompt v1"
+  deployed: true

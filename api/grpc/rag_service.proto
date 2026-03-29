@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package rag;
+
+service RAGService {
+  // Streaming query: returns tokens as they're generated
+  rpc Query (QueryRequest) returns (stream QueryResponse);
+
+  // Fetch full execution trace by ID
+  rpc GetTrace (TraceRequest) returns (TraceResponse);
+}
+
+message QueryRequest {
+  string query = 1;
+  string pipeline = 2;       // "auto" | "agentic" | "graph" | "parallel"
+  string session_id = 3;
+  string api_key = 4;
+}
+
+message QueryResponse {
+  string trace_id = 1;
+  string pipeline_used = 2;
+  string token = 3;           // streaming token
+  string final_answer = 4;    // populated on final chunk
+  bool is_final = 5;
+  map<string, int32> token_usage = 6;
+  float latency_ms = 7;
+}
+
+message TraceRequest {
+  string trace_id = 1;
+  string api_key = 2;
+}
+
+message TraceResponse {
+  string trace_id = 1;
+  string query = 2;
+  string pipeline = 3;
+  string raw_json = 4;        // full trace as JSON string
+}
