@@ -21,6 +21,11 @@ import structlog
 from orchestrator.state import OrchestratorState, AgenticRAGState, GraphRAGState
 from core.config import settings
 
+from observability.metrics import (
+    record_query_latency, record_token_usage, record_cost,
+    record_fallback, record_relevance_score, track_active_query,
+)
+
 logger = structlog.get_logger(__name__)
 
 
@@ -136,12 +141,13 @@ class RAGOrchestrator:
             classification = await classify_query(query)
             mode = classification
 
-        if mode == "parallel":
-            state = await self._run_parallel(state, session_id)
-        elif mode == "graph":
-            state = await self._run_graph_rag(state, session_id)
-        else:
-            state = await self._run_agentic_rag(state, session_id)
+        with track_active_query(mode):
+            if mode == "parallel":
+                state = await self._run_parallel(state, session_id)
+            elif mode == "graph":
+                state = await self._run_graph_rag(state, session_id)
+            else:
+                state = await self._run_agentic_rag(state, session_id)
 
         # Aggregate cost estimate
         usage = state.get("token_usage", {})
@@ -151,10 +157,47 @@ class RAGOrchestrator:
             "estimated_cost_usd": estimate_cost(usage, settings.llm_generation_model),
         }
 
+        pipeline = state.get("pipeline_used", "unknown")
+        latency_s = state["comparison_metrics"]["total_latency_ms"] / 1000
+        usage = state.get("token_usage", {})
+        cost = state["comparison_metrics"].get("estimated_cost_usd", 0.0)
+
+        # Record Prometheus metrics
+        record_query_latency(pipeline, "total", latency_s)
+        record_token_usage(
+            pipeline,
+            settings.llm_generation_model,
+            usage.get("prompt", 0),
+            usage.get("completion", 0),
+        )
+        record_cost(pipeline, cost)
+
+        # Record node-level timings
+        metrics = state.get("comparison_metrics") or {}
+        for pipe_key in ("agentic", "graph"):
+            pipe_metrics = metrics.get(pipe_key, {})
+            for node, node_ms in (pipe_metrics.get("node_timings") or {}).items():
+                record_query_latency(pipe_key, node, node_ms / 1000)
+            if pipe_metrics.get("fallback_triggered"):
+                record_fallback(pipe_key, "vector")
+
+        # Record retrieval relevance scores — only Agentic RAG has explicit relevance scoring
+        agentic = state.get("agentic_result") or {}
+        scores = agentic.get("relevance_scores", [])
+        if scores:
+            record_relevance_score("agentic_rag", sum(scores) / len(scores))
+ 
+        # GraphRAG: use output guardrail grounding score as a proxy for relevance
+        graph = state.get("graph_result") or {}
+        graph_guardrail = (graph.get("output_guardrail_result") or {})
+        graph_score = graph_guardrail.get("score")
+        if graph_score is not None:
+            record_relevance_score("graph_rag", float(graph_score))
+
         logger.info(
             "orchestrator_complete",
             trace_id=trace_id,
-            pipeline=state.get("pipeline_used"),
+            pipeline=pipeline,
             latency_ms=round(state["comparison_metrics"]["total_latency_ms"], 1),
         )
         return state

@@ -106,6 +106,14 @@ make run-api
 # → http://localhost:8000/docs
 ```
 
+
+### 6. re-ingest data
+
+```bash
+rm data/ingest_lineage.db
+uv run data/ingest.py
+```
+
 ---
 
 ## Project Structure

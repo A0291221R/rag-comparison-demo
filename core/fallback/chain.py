@@ -68,7 +68,7 @@ class FallbackChain:
                     latency_ms = (time.perf_counter() - start) * 1000
                     triggered = level != FallbackLevel.VECTOR
                     logger.info(
-                        "fallback_resolved",
+                        "",
                         level=level,
                         triggered=triggered,
                         latency_ms=round(latency_ms, 1),

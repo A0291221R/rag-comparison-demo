@@ -60,6 +60,7 @@ class QdrantVectorStore:
             self._client = QdrantClient(
                 url=self._settings.qdrant_url,
                 api_key=self._settings.qdrant_api_key or None,
+                check_compatibility=False,
             )
         return self._client
 
@@ -69,6 +70,7 @@ class QdrantVectorStore:
             self._async_client = AsyncQdrantClient(
                 url=self._settings.qdrant_url,
                 api_key=self._settings.qdrant_api_key or None,
+                check_compatibility=False,
             )
         return self._async_client
 
@@ -84,14 +86,16 @@ class QdrantVectorStore:
         if self._collection not in names:
             await client.create_collection(
                 collection_name=self._collection,
-                vectors_config=VectorParams(
-                    size=dimension,
-                    distance=Distance.COSINE,
-                    hnsw_config=HnswConfigDiff(
-                        m=16,               # num bidirectional links
-                        ef_construct=200,   # build-time accuracy
-                    ),
-                ),
+                vectors_config={
+                    "dense": VectorParams(
+                        size=dimension,
+                        distance=Distance.COSINE,
+                        hnsw_config=HnswConfigDiff(
+                            m=16,
+                            ef_construct=200,
+                        ),
+                    )
+                },
                 sparse_vectors_config={
                     "sparse": SparseVectorParams(
                         index=SparseIndexParams(on_disk=False)
@@ -135,9 +139,10 @@ class QdrantVectorStore:
     ) -> list[Document]:
         from qdrant_client.models import SearchRequest
         client = self._get_async_client()
-        results = await client.search(
+        results = await client.query_points(
             collection_name=self._collection,
-            query_vector=("dense", query_vector),
+            query=query_vector,
+            using="dense",
             limit=top_k,
             with_payload=True,
         )
@@ -150,7 +155,7 @@ class QdrantVectorStore:
                 source=r.payload.get("source", ""),  # type: ignore
                 embedding_model=r.payload.get("embedding_model", ""),  # type: ignore
             )
-            for r in results
+            for r in results.points
         ]
 
     async def hybrid_search(

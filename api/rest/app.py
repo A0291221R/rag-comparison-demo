@@ -26,6 +26,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from core.config import settings
+# Force metrics registration at startup — must import before first request
+import observability.metrics  # noqa: F401
 
 logger = structlog.get_logger(__name__)
 

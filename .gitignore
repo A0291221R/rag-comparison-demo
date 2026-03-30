@@ -1,0 +1,6 @@
+**/__pycache__
+.env
+.env.docker
+.venv
+*.db
+uv.lock

@@ -7,6 +7,7 @@ graph_db/neo4j_client.py — Neo4j async driver with:
 from __future__ import annotations
 
 import asyncio
+import json
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
@@ -111,7 +112,7 @@ class Neo4jClient:
             MERGE (d:Document {id: $id})
             SET d += $props
             """,
-            {"id": doc_id, "props": metadata},
+            {"id": doc_id, "props": {k: (json.dumps(v) if isinstance(v, (dict, list)) else v) for k, v in (metadata or {}).items()}},
         )
 
     async def upsert_chunk(
@@ -137,7 +138,7 @@ class Neo4jClient:
                 "doc_id": doc_id,
                 "content": content,
                 "embedding": embedding,
-                "metadata": metadata or {},
+                "metadata": json.dumps(metadata or {}),
             },
         )
 
