@@ -5,6 +5,10 @@
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2+-purple.svg)](https://github.com/langchain-ai/langgraph)
 [![Neo4j](https://img.shields.io/badge/Neo4j-5.x-green.svg)](https://neo4j.com/)
 
+
+![Grafana Dashboard](images/Grafana-dashboard.jpg)
+![Jaeger Traces](images/jaeger.jpg)
+![Locust Stress Test](images/locust.jpg)
 ---
 
 ## Architecture
