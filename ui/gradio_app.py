@@ -45,7 +45,8 @@ def run_query(query: str, pipeline_mode: str, session_id: str) -> tuple:
     if not query.strip():
         return ("Please enter a query.", "", "", None, None, "{}", "{}")
 
-    from orchestrator.graph import get_orchestrator
+    import requests
+    from core.config import settings
 
     mode_map = {
         "🤖 Agentic RAG Only": "agentic",
@@ -56,9 +57,30 @@ def run_query(query: str, pipeline_mode: str, session_id: str) -> tuple:
     mode = mode_map.get(pipeline_mode, "auto")
 
     start = time.perf_counter()
-    orchestrator = get_orchestrator()
     try:
-        result = run_async(orchestrator.run(query=query, mode=mode, session_id=session_id or None))
+        resp = requests.post(
+            f"http://localhost:{settings.api_port}/api/v1/query",
+            json={"query": query, "pipeline": mode, "session_id": session_id or None},
+            headers={"X-API-Key": settings.api_key},
+            timeout=120,
+        )
+        resp.raise_for_status()
+        api_result = resp.json()
+        # Fetch full trace for detailed metrics
+        trace_id = api_result.get("trace_id", "")
+        try:
+            trace_resp = requests.get(
+                f"http://localhost:{settings.api_port}/api/v1/traces/{trace_id}",
+                headers={"X-API-Key": settings.api_key},
+                timeout=10,
+            )
+            result = trace_resp.json() if trace_resp.ok else api_result
+        except Exception:
+            result = api_result
+        result["pipeline_used"] = api_result.get("pipeline_used", mode)
+        result["final_answer"] = api_result.get("final_answer", "")
+        result["token_usage"] = api_result.get("token_usage", {})
+        result["comparison_metrics"] = api_result.get("comparison_metrics", {})
     except Exception as exc:
         error_msg = f"❌ Error: {exc}"
         return (error_msg, error_msg, "", None, None, "{}", "{}")

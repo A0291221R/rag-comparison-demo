@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     # ── Pipeline Tuning ──────────────────────────────────────────────────────
     retrieval_top_k: int = 10
     rerank_top_k: int = 5
+    reranking_enabled: bool = True
     relevance_threshold: float = 0.65
     max_agent_iterations: int = 3
     recursion_limit: int = 25

@@ -24,6 +24,7 @@ from orchestrator.state import AgenticRAGState
 from core.config import settings
 from core.guardrails.validators import InputGuardrail, OutputGuardrail
 from core.fallback.chain import FallbackChain, FallbackLevel
+from observability.tracing import trace_node
 
 logger = structlog.get_logger(__name__)
 
@@ -49,7 +50,7 @@ def _accumulate_tokens(state: AgenticRAGState, usage: dict[str, int]) -> None:
 
 
 # ── Node: guardrails (input) ───────────────────────────────────────────────────
-
+@trace_node("guardrails_node")
 async def guardrails_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     guardrail = InputGuardrail()
@@ -69,7 +70,7 @@ async def guardrails_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: query rewrite ────────────────────────────────────────────────────────
-
+@trace_node("query_rewrite_node")
 async def query_rewrite_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     llm = _get_llm(cheap=True)
@@ -102,7 +103,7 @@ async def query_rewrite_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: retrieve ─────────────────────────────────────────────────────────────
-
+@trace_node("retrieve_node")
 async def retrieve_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     query = state.get("rewritten_query") or state["query"]
@@ -117,7 +118,7 @@ async def retrieve_node(state: AgenticRAGState) -> AgenticRAGState:
         embed_result = await provider.embed_query(query)
         query_vector = embed_result.vectors[0]
 
-        retriever = HybridRetriever()
+        retriever = HybridRetriever(use_reranking=settings.reranking_enabled)
         result = await retriever.retrieve(
             query=query,
             query_vector=query_vector,
@@ -151,7 +152,7 @@ async def retrieve_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: grade relevance ──────────────────────────────────────────────────────
-
+@trace_node("grade_relevance_node")
 async def grade_relevance_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     chunks = state.get("retrieved_chunks", [])
@@ -190,7 +191,7 @@ async def grade_relevance_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: generate ─────────────────────────────────────────────────────────────
-
+@trace_node("generate_node")
 async def generate_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     query = state.get("rewritten_query") or state["query"]
@@ -240,7 +241,7 @@ async def generate_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: self-reflect ─────────────────────────────────────────────────────────
-
+@trace_node("self_reflect_node")
 async def self_reflect_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     llm = _get_llm(cheap=True)
@@ -268,7 +269,7 @@ async def self_reflect_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: fallback ─────────────────────────────────────────────────────────────
-
+@trace_node("fallback_node")
 async def fallback_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     logger.warning("fallback_triggered", query=state["query"][:60])
@@ -311,7 +312,7 @@ async def fallback_node(state: AgenticRAGState) -> AgenticRAGState:
 
 
 # ── Node: output guardrails ────────────────────────────────────────────────────
-
+@trace_node("output_guardrails_node")
 async def output_guardrails_node(state: AgenticRAGState) -> AgenticRAGState:
     node_start = time.perf_counter()
     guardrail = OutputGuardrail()

@@ -29,6 +29,11 @@ from core.config import settings
 # Force metrics registration at startup — must import before first request
 import observability.metrics  # noqa: F401
 
+# Initialize OTel tracing
+from observability.tracing import setup_tracing, setup_langsmith
+setup_tracing()
+setup_langsmith()
+
 logger = structlog.get_logger(__name__)
 
 # ── Rate limiter ───────────────────────────────────────────────────────────────

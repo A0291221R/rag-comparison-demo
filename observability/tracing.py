@@ -31,6 +31,9 @@ def setup_tracing() -> None:
         provider = TracerProvider(resource=resource)
         exporter = OTLPSpanExporter(endpoint=settings.otel_exporter_otlp_endpoint)
         provider.add_span_processor(BatchSpanProcessor(exporter))
+        # # Also add a simple sync processor for immediate export during dev
+        # from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        # provider.add_span_processor(SimpleSpanProcessor(exporter))
         trace.set_tracer_provider(provider)
         logger.info("otel_tracing_initialized", endpoint=settings.otel_exporter_otlp_endpoint)
     except Exception as exc:

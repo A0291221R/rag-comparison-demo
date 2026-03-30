@@ -84,7 +84,8 @@ services:
       - "4318:4318"   # OTLP HTTP
       - "8889:8889"   # Prometheus metrics
     volumes:
-      - ./observability/otel-config.yaml:/etc/otelcol/config.yaml
+      # - ./observability/otel-config.yaml:/etc/otelcol/config.yaml
+      - ./observability/otel-config.yaml:/etc/otelcol-contrib/config.yaml
     depends_on:
       - jaeger
 
@@ -95,8 +96,11 @@ services:
     ports:
       - "16686:16686"  # Jaeger UI
       - "14250:14250"  # gRPC
+      # - "4317:4317"    # OTLP gRPC from OTel collector
+      # - "4320:4318"     # OTLP HTTP
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+      SPAN_STORAGE_TYPE: memory
 
   # ─── Prometheus ─────────────────────────────────────────────────────────────
   prometheus:

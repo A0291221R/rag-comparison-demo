@@ -21,6 +21,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from orchestrator.state import GraphRAGState
 from core.config import settings
 from core.guardrails.validators import InputGuardrail, OutputGuardrail
+from observability.tracing import trace_node
 
 logger = structlog.get_logger(__name__)
 
@@ -43,7 +44,7 @@ def _accumulate_tokens(state: GraphRAGState, usage: dict[str, int]) -> None:
 
 
 # ── Node: input guardrails ────────────────────────────────────────────────────
-
+@trace_node("guardrails_node")
 async def guardrails_node(state: GraphRAGState) -> GraphRAGState:
     node_start = time.perf_counter()
     guardrail = InputGuardrail()
@@ -63,7 +64,7 @@ async def guardrails_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: entity extraction ───────────────────────────────────────────────────
-
+@trace_node("entity_extract_node")
 async def entity_extract_node(state: GraphRAGState) -> GraphRAGState:
     """
     Extract named entities from the query using LLM.
@@ -103,7 +104,7 @@ async def entity_extract_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: graph traversal ──────────────────────────────────────────────────────
-
+@trace_node("graph_traverse_node")
 async def graph_traverse_node(state: GraphRAGState) -> GraphRAGState:
     """
     Multi-hop Cypher traversal from extracted entities.
@@ -162,7 +163,7 @@ async def graph_traverse_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: community summary (optional) ────────────────────────────────────────
-
+@trace_node("community_summary_node")
 async def community_summary_node(state: GraphRAGState) -> GraphRAGState:
     """
     Summarize graph neighborhoods (Microsoft GraphRAG approach).
@@ -197,7 +198,7 @@ async def community_summary_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: chunk retrieval from matched nodes ───────────────────────────────────
-
+@trace_node("chunk_retrieve_node")
 async def chunk_retrieve_node(state: GraphRAGState) -> GraphRAGState:
     """Fetch text chunks associated with matched graph entities."""
     node_start = time.perf_counter()
@@ -227,7 +228,7 @@ async def chunk_retrieve_node(state: GraphRAGState) -> GraphRAGState:
 
             provider = get_embedding_provider()
             embed = await provider.embed_query(state["query"])
-            retriever = HybridRetriever()
+            retriever = HybridRetriever(use_reranking=settings.reranking_enabled)
             result = await retriever.retrieve(
                 query=state["query"],
                 query_vector=embed.vectors[0],
@@ -249,7 +250,7 @@ async def chunk_retrieve_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: generate ─────────────────────────────────────────────────────────────
-
+@trace_node("generate_node")
 async def generate_node(state: GraphRAGState) -> GraphRAGState:
     node_start = time.perf_counter()
     llm = _get_llm(cheap=False)
@@ -314,7 +315,7 @@ async def generate_node(state: GraphRAGState) -> GraphRAGState:
 
 
 # ── Node: output guardrails ────────────────────────────────────────────────────
-
+@trace_node("output_guardrails_node")
 async def output_guardrails_node(state: GraphRAGState) -> GraphRAGState:
     node_start = time.perf_counter()
     guardrail = OutputGuardrail()
