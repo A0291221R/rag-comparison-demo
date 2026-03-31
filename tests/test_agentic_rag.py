@@ -207,7 +207,8 @@ class TestOrchestrator:
         mock_response = MagicMock()
         mock_response.content = "graph"
 
-        with patch("orchestrator.graph.ChatOpenAI") as MockLLM:
+        # with patch("orchestrator.graph.ChatOpenAI") as MockLLM:
+        with patch("langchain_openai.ChatOpenAI") as MockLLM:
             instance = AsyncMock()
             instance.ainvoke = AsyncMock(return_value=mock_response)
             MockLLM.return_value = instance
@@ -222,7 +223,7 @@ class TestOrchestrator:
         mock_response = MagicMock()
         mock_response.content = "agentic"
 
-        with patch("orchestrator.graph.ChatOpenAI") as MockLLM:
+        with patch("langchain_openai.ChatOpenAI") as MockLLM:
             instance = AsyncMock()
             instance.ainvoke = AsyncMock(return_value=mock_response)
             MockLLM.return_value = instance
